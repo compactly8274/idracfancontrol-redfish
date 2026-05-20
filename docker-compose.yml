@@ -1,0 +1,15 @@
+services:
+  fancontrol:
+    image: ghcr.io/compactly8274/idracfancontrol-redfish:latest
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./fan_curve.yaml:/config/fan_curve.yaml:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
