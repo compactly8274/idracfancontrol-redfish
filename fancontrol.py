@@ -148,6 +148,23 @@ def patch_attrs(attrs: dict) -> bool:
         return False
 
 
+def discover_thermal_attrs():
+    """Log all ThermalSettings attributes available on this firmware."""
+    try:
+        resp = SESSION.get(ATTRS_URI, timeout=10)
+        resp.raise_for_status()
+        attrs = resp.json().get("Attributes", {})
+        thermal = {k: v for k, v in attrs.items() if "thermal" in k.lower() or "fan" in k.lower()}
+        if thermal:
+            log.info("Available thermal/fan attributes on this iDRAC:")
+            for k, v in sorted(thermal.items()):
+                log.info(f"  {k} = {v!r}")
+        else:
+            log.warning("No ThermalSettings or fan attributes found in iDRAC Attributes endpoint")
+    except Exception as e:
+        log.warning(f"Could not discover thermal attributes: {e}")
+
+
 def suppress_pcie_fan_pin():
     # Try known attribute names — varies by firmware revision
     candidates = [
@@ -188,6 +205,7 @@ def main():
     log.info(f"Poll interval: {POLL_INTERVAL}s | GPU monitoring: {GPU_MONITORING and PYNVML_AVAILABLE}")
     log.info(f"Fan curve: {curve}")
 
+    discover_thermal_attrs()
     suppress_pcie_fan_pin()
 
     if not enable_custom_thermal():
