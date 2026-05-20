@@ -149,20 +149,42 @@ def patch_attrs(attrs: dict) -> bool:
 
 
 def discover_thermal_attrs():
-    """Log all ThermalSettings attributes available on this firmware."""
+    """Log available thermal/fan controls across known Redfish paths."""
+    # 1. Dump all attribute group names from the Attributes endpoint
     try:
         resp = SESSION.get(ATTRS_URI, timeout=10)
         resp.raise_for_status()
         attrs = resp.json().get("Attributes", {})
-        thermal = {k: v for k, v in attrs.items() if "thermal" in k.lower() or "fan" in k.lower()}
+        groups = sorted({k.split(".")[0] for k in attrs})
+        log.info(f"iDRAC Attribute groups present: {groups}")
+        thermal = {k: v for k, v in attrs.items() if "thermal" in k.lower() or "fan" in k.lower() or "ThermalSettings" in k}
         if thermal:
-            log.info("Available thermal/fan attributes on this iDRAC:")
+            log.info("Thermal/fan attributes found:")
             for k, v in sorted(thermal.items()):
                 log.info(f"  {k} = {v!r}")
         else:
-            log.warning("No ThermalSettings or fan attributes found in iDRAC Attributes endpoint")
+            log.warning("No thermal/fan attributes in Attributes endpoint")
     except Exception as e:
-        log.warning(f"Could not discover thermal attributes: {e}")
+        log.warning(f"Attributes endpoint error: {e}")
+
+    # 2. Try the newer Redfish ThermalSubsystem path (iDRAC 9 5.x+)
+    ts_url = f"{BASE_URL}/Chassis/System.Embedded.1/ThermalSubsystem"
+    try:
+        resp = SESSION.get(ts_url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            log.info(f"ThermalSubsystem found: {list(data.keys())}")
+            fans_link = data.get("Fans", {}).get("@odata.id")
+            if fans_link:
+                log.info(f"  Fans collection: {fans_link}")
+                fr = SESSION.get(f"https://{IDRAC_HOST}{fans_link}", timeout=10)
+                if fr.status_code == 200:
+                    for fan in fr.json().get("Members", []):
+                        log.info(f"  Fan member: {fan.get('@odata.id')}")
+        else:
+            log.info(f"ThermalSubsystem not available (HTTP {resp.status_code})")
+    except Exception as e:
+        log.warning(f"ThermalSubsystem probe error: {e}")
 
 
 def suppress_pcie_fan_pin():
