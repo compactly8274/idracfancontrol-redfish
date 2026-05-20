@@ -1,7 +1,6 @@
 services:
   fancontrol:
     image: ghcr.io/compactly8274/idracfancontrol-redfish:latest
-    build: .
     restart: unless-stopped
     env_file: .env
     volumes:
